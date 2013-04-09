@@ -70,7 +70,7 @@ print u'LivePPT-PPT-Converter is launched！';
 # mm.set_body(ppt_id.encode(UTF8_ENCODING));
 # q.write(mm);
 
-ppt_dir_path="I:\\ppt";
+ppt_dir_path="C:\\ppt";
 
 while True:
     m = q.read(wait_time_seconds = MAX_QUEUE_WAIT_TIME);
