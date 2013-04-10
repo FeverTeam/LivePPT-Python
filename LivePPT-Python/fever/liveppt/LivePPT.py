@@ -5,10 +5,11 @@ Created on 2013-4-8
 
 @author: simon_000
 '''
+from __future__ import with_statement;
+
 import os;
 import sys;
 import logging;
-
 import json;
 
 import win32com.client;
@@ -57,9 +58,10 @@ SNS_Conn = boto.sns.connect_to_region(TOKYO_REGION,\
 Application = win32com.client.Dispatch("PowerPoint.Application")
 Application.Visible = True
 
-print sys.getdefaultencoding();
+
 reload(sys);
-sys.setdefaultencoding('UTF-8');
+sys.setdefaultencoding(UTF8_ENCODING);
+print sys.getdefaultencoding();
 print 'LivePPT-PPT-Converter is launched.';
 
 # 测试用途
@@ -68,7 +70,7 @@ print 'LivePPT-PPT-Converter is launched.';
 # mm.set_body(ppt_id.encode(UTF8_ENCODING));
 # q.write(mm);
 
-ppt_dir_path="C:\\ppt";
+ppt_dir_path = u"C:\\ppt";
 
 while True:
     m = q.read(wait_time_seconds = MAX_QUEUE_WAIT_TIME);
@@ -77,24 +79,20 @@ while True:
         pptId = m.get_body_encoded();
         q.delete_message(m);      
         print pptId;
-        print '\n';
         
         #准备路径参数
-        ppt_path = ppt_dir_path+"\\"+pptId; #PPT存放位置
-        save_dir_path = ppt_dir_path+"\\converted_"+pptId; #保存转换后图片的文件夹路径
+        ppt_path = ppt_dir_path + u"\\"+unicode(pptId); #PPT存放位置
+        save_dir_path = ppt_dir_path+u"\\converted_"+unicode(pptId); #保存转换后图片的文件夹路径
         
         #从S3获取文件并存入本地
         k.key = pptId;
-        f = file(ppt_path,"wb");
-        k.get_file(f);
-        f.close();
-        
-        
-        
+        with open(ppt_path, "wb") as f:
+            k.get_file(f);
+            
         #使用PowerPoint打开本地PPT，并进行转换
         try:            
             myPresentation = Application.Presentations.Open(ppt_path);
-            myPresentation.SaveAs(save_dir_path, ppSaveAsPNG);
+            myPresentation.SaveAs(save_dir_path, ppSaveAsJPG);
         finally:
             myPresentation.Close();
             
@@ -102,18 +100,15 @@ while True:
         ppt_count = len(png_file_name_list);
         print 'ppt_page_count'+str(ppt_count);
         for i in range(1, ppt_count+1):
-            png_path = save_dir_path+u"\\幻灯片"+str(i)+u".PNG"; #单个PNG文件路径
+            png_path = save_dir_path+u"\\幻灯片"+unicode(str(i))+u".JPG"; #单个PNG文件路径
             png_key = pptId + "p"+ str(i);
-            print i;
+            print "uploading " + str(i);
             print png_path;
             
             #上传单个文件
-            try:
-                f = open(png_path,"rb");
+            with open(png_path, "rb") as f:
                 k.key = png_key;
                 k.set_contents_from_file(f);
-            finally:
-                f.close();
         
         #组装准备发到SNS的信息
         sns_message = {};
@@ -124,7 +119,4 @@ while True:
         #发送消息到SNS
         SNS_Conn.publish(TOPIC_ARN, json.dumps(sns_message));
         
-#         Application.Quit();
-        
-         
-        
+#         Application.Quit()
