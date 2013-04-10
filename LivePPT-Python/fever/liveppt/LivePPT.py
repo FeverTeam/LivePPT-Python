@@ -62,7 +62,11 @@ Application = win32com.client.Dispatch("PowerPoint.Application")
 Application.Visible = True
 
 print sys.getdefaultencoding();
-print u'LivePPT-PPT-Converter is launched！';
+print 'LivePPT-PPT-Converter is launched.哈哈';
+reload(sys);
+sys.setdefaultencoding('UTF-8');
+print sys.getdefaultencoding();
+
 
 # 测试用途
 # ppt_id = 'eb5697be-9ff0-467c-a7df-36def1ac9001';
@@ -70,19 +74,20 @@ print u'LivePPT-PPT-Converter is launched！';
 # mm.set_body(ppt_id.encode(UTF8_ENCODING));
 # q.write(mm);
 
-ppt_dir_path="I:\\ppt";
+ppt_dir_path="C:\\ppt";
 
 while True:
-    m = q.read(wait_time_seconds = MAX_QUEUE_WAIT_TIME);
+    m = q.read(wait_time_seconds = 1);
     if m<>None:
-        pptId = m.get_body().encode(UTF8_ENCODING);
-        q.delete_message(m);
+        pptId = unicode(m.get_body(), UTF8_ENCODING);
         print pptId;
-        print '\n';
+        q.delete_message(m);
         
         #准备路径参数
         ppt_path = ppt_dir_path+"\\"+pptId; #PPT存放位置
         save_dir_path = ppt_dir_path+"\\converted_"+pptId; #保存转换后图片的文件夹路径
+        print ppt_path;
+        print save_dir_path;
         
         #从S3获取文件并存入本地
         k.key = pptId;
