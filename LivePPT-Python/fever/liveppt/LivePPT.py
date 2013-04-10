@@ -7,17 +7,18 @@ Created on 2013-4-8
 '''
 import os;
 import sys;
-import boto.sqs;
-import boto.sns;
+import logging;
 
 import json;
 
 import win32com.client;
 import win32com.gen_py.MSO as MSO;
 import win32com.gen_py.PO as PO;
+
+import boto.sqs;
+import boto.sns;
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
-from boto.sqs.message import Message
 
 #有关AWS服务的配置
 TOKYO_REGION = 'ap-northeast-1';
@@ -41,32 +42,25 @@ S3_Conn = S3Connection(LBW_AWS_ACCESS_KEY, LBW_AWS_SECRET_KEY);
 pptstore_bucket = S3_Conn.get_bucket(BUCKET_NAME);
 k = Key(pptstore_bucket);
 
-
-
-
 #准备SQS服务
 SQS_Conn = boto.sqs.connect_to_region(TOKYO_REGION,\
                 aws_access_key_id = LBW_AWS_ACCESS_KEY,\
-                aws_secret_access_key = LBW_AWS_SECRET_KEY);
-                
+                aws_secret_access_key = LBW_AWS_SECRET_KEY);                
 q = SQS_Conn.create_queue(QUEUE_NAME);
 
 #准备SNS服务
 SNS_Conn = boto.sns.connect_to_region(TOKYO_REGION,\
                 aws_access_key_id = LBW_AWS_ACCESS_KEY,\
-                aws_secret_access_key = LBW_AWS_SECRET_KEY);
-                
+                aws_secret_access_key = LBW_AWS_SECRET_KEY);                
 
 # 准备PPT应用
 Application = win32com.client.Dispatch("PowerPoint.Application")
 Application.Visible = True
 
 print sys.getdefaultencoding();
-print 'LivePPT-PPT-Converter is launched.哈哈';
 reload(sys);
 sys.setdefaultencoding('UTF-8');
-print sys.getdefaultencoding();
-
+print 'LivePPT-PPT-Converter is launched.';
 
 # 测试用途
 # ppt_id = 'eb5697be-9ff0-467c-a7df-36def1ac9001';
@@ -77,23 +71,25 @@ print sys.getdefaultencoding();
 ppt_dir_path="C:\\ppt";
 
 while True:
-    m = q.read(wait_time_seconds = 1);
+    m = q.read(wait_time_seconds = MAX_QUEUE_WAIT_TIME);
+    #若消息不为空
     if m<>None:
-        pptId = unicode(m.get_body(), UTF8_ENCODING);
+        pptId = m.get_body_encoded();
+        q.delete_message(m);      
         print pptId;
-        q.delete_message(m);
+        print '\n';
         
         #准备路径参数
         ppt_path = ppt_dir_path+"\\"+pptId; #PPT存放位置
         save_dir_path = ppt_dir_path+"\\converted_"+pptId; #保存转换后图片的文件夹路径
-        print ppt_path;
-        print save_dir_path;
         
         #从S3获取文件并存入本地
         k.key = pptId;
         f = file(ppt_path,"wb");
         k.get_file(f);
         f.close();
+        
+        
         
         #使用PowerPoint打开本地PPT，并进行转换
         try:            
@@ -104,9 +100,10 @@ while True:
             
         png_file_name_list = os.listdir(save_dir_path);
         ppt_count = len(png_file_name_list);
-        for i in range(1, ppt_count):
+        print 'ppt_page_count'+str(ppt_count);
+        for i in range(1, ppt_count+1):
             png_path = save_dir_path+u"\\幻灯片"+str(i)+u".PNG"; #单个PNG文件路径
-            png_key = pptId + "-"+ str(i);
+            png_key = pptId + "p"+ str(i);
             print i;
             print png_path;
             
@@ -121,8 +118,8 @@ while True:
         #组装准备发到SNS的信息
         sns_message = {};
         sns_message['isSuccess'] = True;
-        sns_message['pptId']=pptId;
-        sns_message['count'] = "ppt_count";
+        sns_message['pptId'] = pptId;
+        sns_message['count'] = ppt_count;
         
         #发送消息到SNS
         SNS_Conn.publish(TOPIC_ARN, json.dumps(sns_message));
