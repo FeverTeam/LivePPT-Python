@@ -5,118 +5,108 @@ Created on 2013-4-8
 
 @author: simon_000
 '''
-from __future__ import with_statement;
+from __future__ import with_statement
 
-import os;
-import sys;
-import logging;
-import json;
+#导入
+from fever.liveppt import config as conf
+from fever.liveppt import prepare
+from fever.liveppt import path_utils as p
 
-import win32com.client;
-import win32com.gen_py.MSO as MSO;
-import win32com.gen_py.PO as PO;
+import os
+import sys
+import logging
+import json
 
-import boto.sqs;
-import boto.sns;
+import win32com.client
+import win32com.gen_py.MSO as MSO
+import win32com.gen_py.PO as PO
+
+import boto.sqs
+import boto.sns
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 
-#有关AWS服务的配置
-TOKYO_REGION = 'ap-northeast-1';
-LBW_AWS_ACCESS_KEY = 'AKIAIEROLA5Y34CYM6TA';
-LBW_AWS_SECRET_KEY= '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';
-
-QUEUE_NAME = "LivePPT-pptId-Bus";
-BUCKET_NAME = "pptstore";
-TOPIC_ARN = "arn:aws:sns:ap-northeast-1:206956461838:liveppt-sns";
-
-MAX_QUEUE_WAIT_TIME = 20;
-
-UTF8_ENCODING = "UTF-8";
-
-g = globals()
-for c in dir(MSO.constants): g[c] = getattr(MSO.constants, c) # globally define these
-for c in dir(PO.constants): g[c] = getattr(PO.constants, c)
-
-#准备S3服务
-S3_Conn = S3Connection(LBW_AWS_ACCESS_KEY, LBW_AWS_SECRET_KEY);
-pptstore_bucket = S3_Conn.get_bucket(BUCKET_NAME);
-k = Key(pptstore_bucket);
-
-#准备SQS服务
-SQS_Conn = boto.sqs.connect_to_region(TOKYO_REGION,\
-                aws_access_key_id = LBW_AWS_ACCESS_KEY,\
-                aws_secret_access_key = LBW_AWS_SECRET_KEY);                
-q = SQS_Conn.create_queue(QUEUE_NAME);
-
-#准备SNS服务
-SNS_Conn = boto.sns.connect_to_region(TOKYO_REGION,\
-                aws_access_key_id = LBW_AWS_ACCESS_KEY,\
-                aws_secret_access_key = LBW_AWS_SECRET_KEY);                
-
-# 准备PPT应用
-Application = win32com.client.Dispatch("PowerPoint.Application")
-Application.Visible = True
 
 
-reload(sys);
-sys.setdefaultencoding(UTF8_ENCODING);
-print sys.getdefaultencoding();
-print 'LivePPT-PPT-Converter is launched.';
+def main():
+    g = globals()
+    for c in dir(MSO.constants): g[c] = getattr(MSO.constants, c) # globally define these
+    for c in dir(PO.constants): g[c] = getattr(PO.constants, c)
 
-# 测试用途
-# ppt_id = 'eb5697be-9ff0-467c-a7df-36def1ac9001';
-# mm = Message();
-# mm.set_body(ppt_id.encode(UTF8_ENCODING));
-# q.write(mm);
+    #准备S3服务
+    S3_Conn, pptstore_bucket, k = prepare.gen_s3();
 
-ppt_dir_path = u"C:\\ppt";
+    #准备SQS服务
+    SQS_Conn, q = prepare.gen_sqs()
 
-while True:
-    m = q.read(wait_time_seconds = MAX_QUEUE_WAIT_TIME);
-    #若消息不为空
-    if m<>None:
-        pptId = m.get_body_encoded();
-        q.delete_message(m);      
-        print pptId;
-        
-        #准备路径参数
-        ppt_path = ppt_dir_path + u"\\"+unicode(pptId); #PPT存放位置
-        save_dir_path = ppt_dir_path+u"\\converted_"+unicode(pptId); #保存转换后图片的文件夹路径
-        
-        #从S3获取文件并存入本地
-        k.key = pptId;
-        with open(ppt_path, "wb") as f:
-            k.get_file(f);
+    #准备SNS服务
+    SNS_Conn = prepare.gen_sns()
+
+    # 准备PPT应用
+    Application = win32com.client.Dispatch(conf.POWERPOINT_APPLICATION_NAME)
+    Application.Visible = True
+
+
+    reload(sys)
+    sys.setdefaultencoding(conf.UTF8_ENCODING)
+    print sys.getdefaultencoding()
+    print 'LivePPT-PPT-Converter is launched.'
+
+    # 测试用途
+    # ppt_id = 'eb5697be-9ff0-467c-a7df-36def1ac9001'
+    # mm = Message()
+    # mm.set_body(ppt_id.encode(UTF8_ENCODING))
+    # q.write(mm)
+
+    while True:
+        m = q.read(wait_time_seconds = conf.MAX_QUEUE_WAIT_TIME)
+        #若消息不为空
+        if m<>None:
+            ppt_id = m.get_body_encoded()
+            q.delete_message(m)      
+            print ppt_id
             
-        #使用PowerPoint打开本地PPT，并进行转换
-        try:            
-            myPresentation = Application.Presentations.Open(ppt_path);
-            myPresentation.SaveAs(save_dir_path, ppSaveAsJPG);
-        finally:
-            myPresentation.Close();
+            #准备路径参数
+            ppt_path = p.gen_ppt_path(ppt_id) #PPT存放位置
+            save_dir_path = p.gen_save_dir_path(ppt_id) #保存转换后图片的文件夹路径
             
-        png_file_name_list = os.listdir(save_dir_path);
-        ppt_count = len(png_file_name_list);
-        print 'ppt_page_count'+str(ppt_count);
-        for i in range(1, ppt_count+1):
-            png_path = save_dir_path+u"\\幻灯片"+unicode(str(i))+u".JPG"; #单个PNG文件路径
-            png_key = pptId + "p"+ str(i);
-            print "uploading " + str(i);
-            print png_path;
+            #从S3获取文件并存入本地
+            k.key = ppt_id
+            with open(ppt_path, "wb") as f:
+                k.get_file(f)
+                
+            #使用PowerPoint打开本地PPT，并进行转换
+            try:            
+                myPresentation = Application.Presentations.Open(ppt_path)
+                myPresentation.SaveAs(save_dir_path, ppSaveAsJPG)
+            finally:
+                myPresentation.Close()
+                
+            png_file_name_list = os.listdir(save_dir_path)
+            ppt_count = len(png_file_name_list)
+            print 'ppt_page_count'+str(ppt_count)
+            for index in range(1, ppt_count+1):
+                png_path = p.gen_single_png_path(ppt_id, index) #单个PNG文件路径
+                png_key = ppt_id + "p"+ str(index)
+                print "uploading " + str(index)
+                print png_path
+                
+                #上传单个文件
+                with open(png_path, "rb") as f:
+                    k.key = png_key
+                    k.set_contents_from_file(f)
             
-            #上传单个文件
-            with open(png_path, "rb") as f:
-                k.key = png_key;
-                k.set_contents_from_file(f);
-        
-        #组装准备发到SNS的信息
-        sns_message = {};
-        sns_message['isSuccess'] = True;
-        sns_message['pptId'] = pptId;
-        sns_message['count'] = ppt_count;
-        
-        #发送消息到SNS
-        SNS_Conn.publish(TOPIC_ARN, json.dumps(sns_message));
-        
-#         Application.Quit()
+            #组装准备发到SNS的信息
+            sns_message = {}
+            sns_message['isSuccess'] = True
+            sns_message['ppt_id'] = ppt_id
+            sns_message['count'] = ppt_count
+            
+            #发送消息到SNS
+            SNS_Conn.publish(conf.TOPIC_ARN, json.dumps(sns_message))
+            
+    #         Application.Quit()
+    return
+
+if __name__ == '__main__':
+    main()
