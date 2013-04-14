@@ -8,9 +8,9 @@ Created on 2013-4-8
 from __future__ import with_statement
 
 #导入
-from fever.liveppt import config as conf
-from fever.liveppt import prepare
-from fever.liveppt import path_utils as p
+import config as conf
+import prepare
+import path_utils as p
 
 import os
 import sys
