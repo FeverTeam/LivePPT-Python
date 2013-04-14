@@ -89,7 +89,7 @@ def main():
                 png_path = p.gen_single_png_path(ppt_id, index) #单个PNG文件路径
                 png_key = ppt_id + "p"+ str(index)
                 print "uploading " + str(index)
-                print png_path
+                # print png_path
                 
                 #上传单个文件
                 with open(png_path, "rb") as f:
