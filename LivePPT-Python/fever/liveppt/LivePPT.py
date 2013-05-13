@@ -99,8 +99,8 @@ def main():
             #组装准备发到SNS的信息
             sns_message = {}
             sns_message['isSuccess'] = True
-            sns_message['ppt_id'] = ppt_id
-            sns_message['count'] = ppt_count
+            sns_message['storeKey'] = ppt_id
+            sns_message['pageCount'] = ppt_count
             
             #发送消息到SNS
             SNS_Conn.publish(conf.TOPIC_ARN, json.dumps(sns_message))
